@@ -1,0 +1,269 @@
+\<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=805, initial-scale=1.0"/>
+  <title>물방울 파티클 효과</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', sans-serif;
+      background: #000;
+    }
+    .controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      z-index: 1000;
+      backdrop-filter: blur(10px);
+    }
+    button {
+      background: linear-gradient(45deg, #4CAF50, #45a049);
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 2px;
+      transition: all 0.3s ease;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .volume-control {
+      width: 150px;
+    }
+    #canvas-container {
+      width: 805px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <div class="control-group">
+      <label>배경음악 (기본: assets/s1.mp3)</label>
+      <button id="playBtn">재생</button>
+      <button id="pauseBtn">일시정지</button>
+    </div>
+    <div class="control-group">
+      <label>볼륨</label>
+      <input type="range" id="volumeSlider" class="volume-control" min="0" max="1" step="0.1" value="0.5">
+    </div>
+    <div class="control-group">
+      <button id="resetParticles">거품 리셋</button>
+      <button id="toggleParticles">거품 ON/OFF</button>
+      <button id="autoPlay">자동 BGM 재생</button>
+    </div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script>
+    class WaterBubble {
+      constructor(x, y) {
+        this.pos = createVector(x || random(width), y || height + random(0, 100));
+        this.vel = createVector(random(-0.3, 0.3), random(-1, -3));
+        this.acc = createVector(0, -0.02);
+        this.size = random(5, 20);
+        this.alpha = random(100, 200);
+        this.lifespan = 255;
+        this.wobble = random(TWO_PI);
+        this.wobbleSpeed = random(0.02, 0.05);
+        this.popSize = 0;
+        this.isPopping = false;
+        this.color = color(random(100, 200), random(150, 255), 255, this.alpha);
+      }
+
+      update() {
+        this.wobble += this.wobbleSpeed;
+        this.acc.x = sin(this.wobble) * 0.01;
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+
+        if (this.pos.y < 20 && !this.isPopping) {
+          this.isPopping = true;
+          this.popSize = 0;
+        }
+
+        if (this.isPopping) {
+          this.popSize += 3;
+          this.alpha -= 8;
+        }
+
+        if (this.pos.y < height * 0.3) {
+          this.alpha -= 1;
+        }
+
+        this.lifespan -= 0.5;
+      }
+
+      display() {
+        push();
+        if (!this.isPopping) {
+          fill(0, 0, 0, 20);
+          ellipse(this.pos.x + 1, this.pos.y + 3, this.size * 0.8);
+
+          fill(red(this.color), green(this.color), blue(this.color), this.alpha * 0.3);
+          stroke(255, 255, 255, this.alpha * 0.8);
+          strokeWeight(1.5);
+          ellipse(this.pos.x, this.pos.y, this.size);
+
+          fill(255, 255, 255, this.alpha * 0.9);
+          noStroke();
+          ellipse(this.pos.x - this.size * 0.25, this.pos.y - this.size * 0.25, this.size * 0.2);
+
+          fill(255, 255, 255, this.alpha * 0.5);
+          ellipse(this.pos.x + this.size * 0.15, this.pos.y - this.size * 0.1, this.size * 0.1);
+
+          noFill();
+          stroke(200, 230, 255, this.alpha * 0.4);
+          strokeWeight(0.5);
+          ellipse(this.pos.x, this.pos.y, this.size * 0.7);
+        }
+
+        if (this.isPopping && this.popSize < 30) {
+          noFill();
+          stroke(200, 230, 255, this.alpha);
+          strokeWeight(2);
+          ellipse(this.pos.x, this.pos.y, this.popSize);
+
+          fill(150, 200, 255, this.alpha);
+          noStroke();
+          for (let i = 0; i < 6; i++) {
+            let angle = (TWO_PI / 6) * i;
+            let x = this.pos.x + cos(angle) * this.popSize * 0.3;
+            let y = this.pos.y + sin(angle) * this.popSize * 0.3;
+            ellipse(x, y, 3);
+          }
+        }
+
+        pop();
+      }
+
+      isDead() {
+        return this.lifespan <= 0 || (this.isPopping && this.popSize > 30) || this.alpha <= 0;
+      }
+    }
+
+    let particles = [];
+    let backgroundImg;
+    let bgMusic;
+    let particlesEnabled = true;
+    const maxParticles = 100;
+
+    function preload() {
+      backgroundImg = loadImage('assets/luy.png');
+      bgMusic = loadSound('assets/s1.mp3');
+    }
+
+    function setup() {
+      let canvas = createCanvas(805, 721);
+      canvas.parent('canvas-container');
+
+      for (let i = 0; i < 30; i++) {
+        particles.push(new WaterBubble());
+      }
+
+      setupControls();
+
+      if (bgMusic) {
+        bgMusic.setVolume(0.5);
+      }
+    }
+
+    function draw() {
+      background(255);
+      image(backgroundImg, 0, 0, 805, 721);
+
+      if (particlesEnabled) {
+        updateParticles();
+        drawParticles();
+      }
+
+      // 마우스 위치 제한
+      if (mouseIsPressed && particlesEnabled) {
+        if (mouseX > 100 && mouseX < 705) {
+          particles.push(new WaterBubble(mouseX + random(-10, 10), height));
+        }
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        if (particles[i].isDead()) {
+          particles.splice(i, 1);
+        }
+      }
+
+      if (particles.length < 50 && random() < 0.08) {
+        particles.push(new WaterBubble(random(150, 650), height));
+      }
+    }
+
+    function drawParticles() {
+      for (let p of particles) {
+        p.display();
+      }
+    }
+
+    function setupControls() {
+      document.getElementById('playBtn').addEventListener('click', function() {
+        if (bgMusic) bgMusic.loop();
+      });
+
+      document.getElementById('pauseBtn').addEventListener('click', function() {
+        if (bgMusic) bgMusic.pause();
+      });
+
+      document.getElementById('volumeSlider').addEventListener('input', function(e) {
+        if (bgMusic) bgMusic.setVolume(parseFloat(e.target.value));
+      });
+
+      document.getElementById('resetParticles').addEventListener('click', function() {
+        particles = [];
+        for (let i = 0; i < 30; i++) {
+          particles.push(new WaterBubble());
+        }
+      });
+
+      document.getElementById('toggleParticles').addEventListener('click', function() {
+        particlesEnabled = !particlesEnabled;
+        this.textContent = particlesEnabled ? '거품 ON/OFF' : '거품 켜기';
+      });
+
+      document.getElementById('autoPlay').addEventListener('click', function() {
+        if (bgMusic && !bgMusic.isPlaying()) {
+          bgMusic.loop();
+          this.textContent = 'BGM 재생중...';
+        } else if (bgMusic) {
+          bgMusic.pause();
+          this.textContent = '자동 BGM 재생';
+        }
+      });
+    }
+
+    function mousePressed() {
+      if (particlesEnabled && mouseX > 100 && mouseX < 705 && particles.length < maxParticles) {
+        for (let i = 0; i < 8; i++) {
+          particles.push(new WaterBubble(mouseX + random(-40, 40), height + random(0, 20)));
+        }
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(805, 721);
+    }
+  </script>
+</body>
+</html>
